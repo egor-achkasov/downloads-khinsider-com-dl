@@ -134,19 +134,6 @@ async fn download(
     tx: Sender<Event>,
     flac: bool,
 ) -> Result<()> {
-    async fn dl(client: reqwest::Client, url: &Url, dest_dir: std::path::PathBuf) -> Result<()> {
-        let filename = url
-            .path_segments()
-            .and_then(|s| s.last())
-            .ok_or(anyhow::anyhow!("Failed to get filename from url"))?;
-        // khinsider double-encodes URLs (%20 → %2520), so decode twice
-        let filename = percent_decode(&percent_decode(filename));
-        let bytes = client.get(url.clone()).send().await?.bytes().await?;
-        tokio::fs::write(dest_dir.join(&filename), &bytes).await?;
-
-        Ok(())
-    }
-
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let name = url
         .path_segments()
@@ -168,8 +155,47 @@ async fn download(
         url.clone()
     };
 
-    match dl(client, &download_url, dest_dir).await {
-        Err(e) => tx.send(Event::DlFailed { id, error: e })?,
+    let mut response = match client.get(download_url.clone()).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tx.send(Event::DlFailed { id, error: e.into() })?;
+            return Ok(());
+        }
+    };
+
+    let total = response.content_length();
+    let mut downloaded: u64 = 0;
+    let mut file_bytes = Vec::new();
+
+    loop {
+        match response.chunk().await {
+            Ok(Some(chunk)) => {
+                downloaded += chunk.len() as u64;
+                file_bytes.extend_from_slice(&chunk);
+                let _ = tx.send(Event::DlProgress { id, downloaded, total });
+            }
+            Ok(None) => break,
+            Err(e) => {
+                tx.send(Event::DlFailed { id, error: e.into() })?;
+                return Ok(());
+            }
+        }
+    }
+
+    // khinsider double-encodes URLs (%20 → %2520), so decode twice
+    let filename = match download_url.path_segments().and_then(|s| s.last()) {
+        Some(s) => percent_decode(&percent_decode(s)),
+        None => {
+            tx.send(Event::DlFailed {
+                id,
+                error: anyhow::anyhow!("Failed to get filename from url"),
+            })?;
+            return Ok(());
+        }
+    };
+
+    match tokio::fs::write(dest_dir.join(&filename), &file_bytes).await {
+        Err(e) => tx.send(Event::DlFailed { id, error: e.into() })?,
         Ok(()) => tx.send(Event::DlCompleted { id })?,
     };
 

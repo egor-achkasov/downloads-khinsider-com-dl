@@ -47,15 +47,31 @@ fn parse_args() -> Result<Config> {
     })
 }
 
+struct SlotInfo {
+    name: String,
+    downloaded: u64,
+    total: Option<u64>,
+}
+
+impl SlotInfo {
+    fn format_line(&self) -> String {
+        match self.total {
+            Some(total) if total > 0 => {
+                let pct = (self.downloaded * 100 / total) as u8;
+                format!("{pct:3}% {}", self.name)
+            }
+            _ => format!("     {}", self.name),
+        }
+    }
+}
+
 #[derive(Default)]
 struct ProgressState {
     total: usize,
     completed: usize,
     failed: usize,
-    /// Each slot holds the display name of an active download, or None if free.
-    slots: Vec<Option<String>>,
+    slots: Vec<Option<SlotInfo>>,
     id_to_slot: HashMap<usize, usize>,
-    /// How many lines the progress block currently occupies on screen.
     lines_printed: usize,
 }
 
@@ -65,8 +81,17 @@ impl ProgressState {
             self.slots.push(None);
             self.slots.len() - 1
         });
-        self.slots[slot] = Some(name);
+        self.slots[slot] = Some(SlotInfo { name, downloaded: 0, total: None });
         self.id_to_slot.insert(id, slot);
+    }
+
+    fn update_progress(&mut self, id: usize, downloaded: u64, total: Option<u64>) {
+        if let Some(&slot) = self.id_to_slot.get(&id) {
+            if let Some(Some(info)) = self.slots.get_mut(slot) {
+                info.downloaded = downloaded;
+                info.total = total;
+            }
+        }
     }
 
     fn free_slot(&mut self, id: usize) {
@@ -95,7 +120,7 @@ impl ProgressState {
         for slot in &self.slots {
             let _ = execute!(stdout, Clear(ClearType::CurrentLine));
             match slot {
-                Some(name) => println!("  {name}"),
+                Some(info) => println!("  {}", info.format_line()),
                 None => println!(),
             }
         }
@@ -117,6 +142,10 @@ fn handle_event(event: Event, state: &mut ProgressState) {
             state.alloc_slot(id, name);
             state.render();
         }
+        Event::DlProgress { id, downloaded, total } => {
+            state.update_progress(id, downloaded, total);
+            state.render();
+        }
         Event::DlCompleted { id } => {
             state.completed += 1;
             state.free_slot(id);
@@ -125,7 +154,7 @@ fn handle_event(event: Event, state: &mut ProgressState) {
         Event::DlFailed { id, error } => {
             state.failed += 1;
             state.free_slot(id);
-            // Print error above the progress block by moving up, printing, then re-rendering.
+            // Print error above the progress block
             if state.lines_printed > 0 {
                 let _ = execute!(
                     std::io::stdout(),
