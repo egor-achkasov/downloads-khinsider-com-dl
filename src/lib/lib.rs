@@ -7,7 +7,10 @@ use event::Event;
 use anyhow::{Context, Result};
 use reqwest::Url;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;
+
+static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 pub async fn run(config: Config, tx: Sender<Event>) -> Result<()> {
     let client = reqwest::Client::new();
@@ -19,6 +22,9 @@ pub async fn run(config: Config, tx: Sender<Event>) -> Result<()> {
     let (name, image_urls, track_urls) = parse_page(main_page, config.images).await?;
     let dest_dir = std::path::Path::new(&name).to_path_buf();
     std::fs::create_dir_all(&dest_dir)?;
+
+    let image_count = if config.images { image_urls.len() } else { 0 };
+    tx.send(Event::TotalDownloads(track_urls.len() + image_count))?;
 
     let mut joinset = tokio::task::JoinSet::new();
 
@@ -141,21 +147,30 @@ async fn download(
         Ok(())
     }
 
-    tx.send(Event::DlStarted { url: url.to_string() })?;
+    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    let name = url
+        .path_segments()
+        .and_then(|s| s.last())
+        .map(|s| percent_decode(&percent_decode(s)))
+        .unwrap_or_else(|| url.to_string());
+
+    tx.send(Event::DlStarted { id, name })?;
+
     let download_url = if flac {
         match resolve_flac_url(&client, &url).await {
             Ok(u) => u,
             Err(e) => {
-                tx.send(Event::DlFailed { error: e })?;
+                tx.send(Event::DlFailed { id, error: e })?;
                 return Ok(());
             }
         }
     } else {
         url.clone()
     };
+
     match dl(client, &download_url, dest_dir).await {
-        Err(e) => tx.send(Event::DlFailed { error: e })?,
-        Ok(()) => tx.send(Event::DlCompleted { url: url.to_string() })?
+        Err(e) => tx.send(Event::DlFailed { id, error: e })?,
+        Ok(()) => tx.send(Event::DlCompleted { id })?,
     };
 
     Ok(())

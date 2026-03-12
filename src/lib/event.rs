@@ -2,7 +2,8 @@ pub enum Event {
     GetPageStarted,
     GetPageCompleted,
 
-    DlStarted { url: String },
-    DlCompleted { url: String },
-    DlFailed { error: anyhow::Error },
+    TotalDownloads(usize),
+    DlStarted { id: usize, name: String },
+    DlCompleted { id: usize },
+    DlFailed { id: usize, error: anyhow::Error },
 }
