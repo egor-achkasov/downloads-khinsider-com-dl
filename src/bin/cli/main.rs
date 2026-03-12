@@ -13,11 +13,11 @@ struct Args {
     /// Link to the album page on downloads.khinsider.com (example https://downloads.khinsider.com/game-soundtracks/album/synthetik-2-windows-gamerip-2021)
     url: String,
 
-    /// Download flacs. Download MP3 if not set.
+    /// Download flacs. Download MP3 if not set
     #[arg(short = 'f', long = "flac")]
     flac: bool,
 
-    /// TODO: fill in --images flag description
+    /// Download images into "images" directory
     #[arg(short = 'i', long = "images")]
     images: bool,
 }
