@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::io::Write;
 
 #[derive(Parser)]
-#[command(about = "TODO: fill in description")]
+#[command(about = "Download game soundtracks from downloads.khinsider.com")]
 struct Args {
     /// Link to the album page on downloads.khinsider.com (example https://downloads.khinsider.com/game-soundtracks/album/synthetik-2-windows-gamerip-2021)
     url: String,
