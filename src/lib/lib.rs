@@ -163,14 +163,14 @@ async fn download(
         }
     };
 
-    let total = response.content_length();
-    let mut downloaded: u64 = 0;
+    let total: Option<usize> = response.content_length().and_then(|l| l.try_into().ok());
+    let mut downloaded: usize = 0;
     let mut file_bytes = Vec::new();
 
     loop {
         match response.chunk().await {
             Ok(Some(chunk)) => {
-                downloaded += chunk.len() as u64;
+                downloaded += chunk.len();
                 file_bytes.extend_from_slice(&chunk);
                 let _ = tx.send(Event::DlProgress { id, downloaded, total });
             }

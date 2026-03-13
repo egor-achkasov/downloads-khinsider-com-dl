@@ -49,8 +49,8 @@ fn parse_args() -> Result<Config> {
 
 struct SlotInfo {
     name: String,
-    downloaded: u64,
-    total: Option<u64>,
+    downloaded: usize,
+    total: Option<usize>,
 }
 
 impl SlotInfo {
@@ -85,7 +85,7 @@ impl ProgressState {
         self.id_to_slot.insert(id, slot);
     }
 
-    fn update_progress(&mut self, id: usize, downloaded: u64, total: Option<u64>) {
+    fn update_progress(&mut self, id: usize, downloaded: usize, total: Option<usize>) {
         if let Some(&slot) = self.id_to_slot.get(&id) {
             if let Some(Some(info)) = self.slots.get_mut(slot) {
                 info.downloaded = downloaded;

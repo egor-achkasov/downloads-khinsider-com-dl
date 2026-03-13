@@ -4,7 +4,7 @@ pub enum Event {
 
     TotalDownloads(usize),
     DlStarted { id: usize, name: String },
-    DlProgress { id: usize, downloaded: u64, total: Option<u64> },
+    DlProgress { id: usize, downloaded: usize, total: Option<usize> },
     DlCompleted { id: usize },
     DlFailed { id: usize, error: anyhow::Error },
 }
