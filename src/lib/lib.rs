@@ -7,6 +7,7 @@ use event::Event;
 use anyhow::{Context, Result};
 use reqwest::Url;
 
+use std::process::exit;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;
 
@@ -135,11 +136,15 @@ async fn download(
     flac: bool,
 ) -> Result<()> {
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-    let name = url
+    let mut name = url
         .path_segments()
         .and_then(|s| s.last())
         .map(|s| percent_decode(&percent_decode(s)))
         .unwrap_or_else(|| url.to_string());
+    if flac && name.ends_with(".mp3") {
+        name.truncate(name.len() - 3);
+        name.push_str("flac");
+    }
 
     tx.send(Event::DlStarted { id, name })?;
 
